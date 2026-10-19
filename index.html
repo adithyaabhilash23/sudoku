@@ -73,6 +73,24 @@
         </div>
     </div>
 
+    <!-- CONFIRM Modal -->
+    <div class="modal-overlay" id="confirm-modal"
+         role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+        <div class="modal">
+            <div class="modal-icon" aria-hidden="true">⚠️</div>
+            <div class="modal-title" id="confirm-modal-title" style="color:var(--gold)">Start New Game?</div>
+            <div class="modal-sub" id="confirm-modal-sub">Abandon your current game progress?</div>
+            <div class="modal-btns">
+                <button class="modal-btn primary" id="confirm-modal-ok"
+                        data-action="confirm-dialog-ok"
+                        aria-label="Confirm and proceed">Continue</button>
+                <button class="modal-btn secondary" id="confirm-modal-cancel"
+                        data-action="confirm-dialog-cancel"
+                        aria-label="Cancel and keep current game">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <div class="app-wrapper">
         <!-- Header -->
         <header role="banner">
@@ -284,7 +302,7 @@
             </div>
 
             <div class="panel-card best-times-card" role="region" aria-label="Best completion times per difficulty">
-                <div class="panel-title">🏆 Best Times</div>
+                <div class="panel-title" id="best-times-title">🏆 Best Times</div>
                 <div id="best-times"
                      style="display:flex;flex-direction:column;gap:6px;font-size:0.8rem;"
                      aria-label="Best completion times per difficulty">

@@ -88,45 +88,77 @@ function _permuteBandsAndStacks(board) {
 export function generatePuzzle(clueCount) {
     const { boardSize, cellCount } = BOARD_CONFIG;
     const largeboard = boardSize > 9;
-
-    // ── 1. Build complete valid solution ──────────────────────────────────────
-    const sol = Array(cellCount).fill(0);
-
-    if (largeboard) {
-        // Seed diagonal boxes so the deterministic solve is very fast
-        _seedDiagonalBoxes(sol);
-        solve(sol, false); // deterministic — much faster than randomised
-        // Randomise by permuting symbols + shuffling rows/cols within bands
-        _permuteSymbols(sol);
-        _permuteBandsAndStacks(sol);
-    } else {
-        // Small boards: full randomised solve from blank (proven fast)
-        solve(sol, true);
-    }
-
-    // ── 2. Remove cells ───────────────────────────────────────────────────────
-    const puzzle    = [...sol];
-    const positions = shuffle([...Array(cellCount).keys()]);
-    let removed = 0;
     const target = cellCount - clueCount;
 
-    for (const pos of positions) {
-        if (removed >= target) break;
-        const backup = puzzle[pos];
-        puzzle[pos]  = 0;
+    // Small boards with aggressive clue removal (e.g. Expert 9x9) may encounter
+    // irreducible clue sets in a single greedy removal pass. Bounded regeneration
+    // ensures the exact clue target is reliably met while preserving 100% uniqueness.
+    const maxAttempts = (largeboard || clueCount > 24) ? 1 : 300;
 
-        if (!largeboard) {
-            // For small boards guarantee uniqueness
-            const test = [...puzzle];
-            if (countSolutions(test, 2) !== 1) {
-                puzzle[pos] = backup;
-                continue;
+    let bestPuzzle = null;
+    let bestSol = null;
+    let bestClues = cellCount;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        // ── 1. Build complete valid solution ──────────────────────────────────────
+        const sol = Array(cellCount).fill(0);
+
+        if (largeboard) {
+            // Seed diagonal boxes so the deterministic solve is very fast
+            let solved = false;
+            let attempts = 0;
+            while (!solved && attempts < 5) {
+                attempts++;
+                sol.fill(0);
+                _seedDiagonalBoxes(sol);
+                solved = solve(sol, false, 3000);
             }
+            if (!solved) {
+                sol.fill(0);
+                solve(sol, false, 5000);
+            }
+            // Randomise by permuting symbols + shuffling rows/cols within bands
+            _permuteSymbols(sol);
+            _permuteBandsAndStacks(sol);
+        } else {
+            // Small boards: full randomised solve from blank (proven fast)
+            solve(sol, true);
         }
-        // For large boards: sufficient clue counts make non-uniqueness
-        // astronomically unlikely; skip the expensive uniqueness check.
-        removed++;
+
+        // ── 2. Remove cells ───────────────────────────────────────────────────────
+        const puzzle    = [...sol];
+        const positions = shuffle([...Array(cellCount).keys()]);
+        let removed = 0;
+
+        for (const pos of positions) {
+            if (removed >= target) break;
+            const backup = puzzle[pos];
+            puzzle[pos]  = 0;
+
+            if (!largeboard) {
+                // For small boards guarantee uniqueness
+                const test = [...puzzle];
+                if (countSolutions(test, 2) !== 1) {
+                    puzzle[pos] = backup;
+                    continue;
+                }
+            }
+            // For large boards: sufficient clue counts make non-uniqueness
+            // astronomically unlikely; skip the expensive uniqueness check.
+            removed++;
+        }
+
+        const currentClues = cellCount - removed;
+        if (currentClues < bestClues) {
+            bestClues = currentClues;
+            bestPuzzle = puzzle;
+            bestSol = sol;
+        }
+
+        if (removed >= target) {
+            break;
+        }
     }
 
-    return { puzzle, solution: sol };
+    return { puzzle: bestPuzzle, solution: bestSol };
 }

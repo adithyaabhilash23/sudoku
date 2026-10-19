@@ -12,13 +12,14 @@ import {
 } from './core/game.js';
 import { renderBoard, updateBoardDisplay, updateBestTimes, updateNumPad } from './ui/board.js';
 import { renderNumPad, initKeyboard, initBg } from './ui/controls.js';
-import { showModal, closeModal } from './ui/modal.js';
+import { showModal, closeModal, showConfirmModal, resolveConfirmModal } from './ui/modal.js';
 import { showToast, addHistoryLog, launchConfetti } from './ui/toast.js';
 
 // ── WIRE UI CALLBACKS INTO GAME LOGIC ────────────────────────────────────────
 registerUI({
     showModal,
     closeModal,
+    showConfirmModal,
     showToast,
     addHistoryLog,
     launchConfetti,
@@ -31,16 +32,18 @@ registerUI({
 
 // ── ACTION MAP ────────────────────────────────────────────────────────────────
 const ACTION_MAP = {
-    'new-game':        () => newGame(),
-    'undo':            () => undoMove(),
-    'hint':            () => useHint(),
-    'solve':           () => solvePuzzle(),
-    'reset':           () => confirmReset(),
-    'reveal-solution': () => revealSolution(),
-    'set-difficulty':  (el) => setDifficulty(el.dataset.diff),
-    'toggle-opt':      (el) => toggleOpt(el.dataset.opt),
-    'close-modal':     (el) => closeModal(el.dataset.modal),
-    'set-board-size':  (el) => setBoardSizeAndNewGame(+el.dataset.size),
+    'new-game':              () => newGame(),
+    'undo':                  () => undoMove(),
+    'hint':                  () => useHint(),
+    'solve':                 () => solvePuzzle(),
+    'reset':                 () => confirmReset(),
+    'reveal-solution':       () => revealSolution(),
+    'set-difficulty':        (el) => setDifficulty(el.dataset.diff),
+    'toggle-opt':            (el) => toggleOpt(el.dataset.opt),
+    'close-modal':           (el) => closeModal(el.dataset.modal),
+    'set-board-size':        (el) => setBoardSizeAndNewGame(+el.dataset.size),
+    'confirm-dialog-ok':     () => resolveConfirmModal(true),
+    'confirm-dialog-cancel': () => resolveConfirmModal(false),
 };
 
 // ── EVENT DELEGATION ─────────────────────────────────────────────────────────

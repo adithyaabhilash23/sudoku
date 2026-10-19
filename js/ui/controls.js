@@ -14,6 +14,7 @@ import { BOARD_CONFIG } from '../core/config.js';
 import { inputNumber, clearCell, undoMove, useHint, toggleOpt } from '../core/game.js';
 import { selectCell } from './board.js';
 import { toSymbol, keyToNum } from '../utils/symbols.js';
+import { resolveConfirmModal } from './modal.js';
 
 // ── PAGINATION STATE ──────────────────────────────────────────────────────────
 const PAGE_SIZE = 9; // always show at most 9 number buttons
@@ -170,10 +171,25 @@ function _syncNumPadState() { updateNumPad(); }
 // ── KEYBOARD SHORTCUTS ────────────────────────────────────────────────────────
 export function initKeyboard() {
     document.addEventListener('keydown', e => {
+        const key = e.key;
+
+        // If confirm modal is currently visible, handle Enter and Escape
+        const confirmModal = document.getElementById('confirm-modal');
+        if (confirmModal && confirmModal.classList.contains('show')) {
+            if (key === 'Escape') {
+                e.preventDefault();
+                resolveConfirmModal(false);
+            } else if (key === 'Enter') {
+                e.preventDefault();
+                resolveConfirmModal(true);
+            }
+            return;
+        }
+
         if (!state.gameActive) return;
-        const key       = e.key;
         const boardSize = BOARD_CONFIG.boardSize;
         const cellCount = BOARD_CONFIG.cellCount;
+        const lowerKey  = key.toLowerCase();
 
         // Arrow keys — navigate board cells
         if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
@@ -189,14 +205,54 @@ export function initKeyboard() {
             return;
         }
 
-        // Number / letter input — supports 1-9 and A-G (or further)
-        const num = keyToNum(key, boardSize);
-        if (num !== null) { inputNumber(num); return; }
+        // Global modifier shortcuts for Hint and Notes (available across all board sizes)
+        if ((e.altKey || e.ctrlKey) && lowerKey === 'h') {
+            e.preventDefault();
+            useHint();
+            return;
+        }
+        if ((e.altKey || e.ctrlKey) && lowerKey === 'n') {
+            e.preventDefault();
+            toggleOpt('notes');
+            return;
+        }
 
-        if (key === '0' || key === 'Delete' || key === 'Backspace') { clearCell(); return; }
-        if (key.toLowerCase() === 'z' || (e.ctrlKey && key.toLowerCase() === 'z')) { undoMove(); return; }
-        if (key.toLowerCase() === 'n') { toggleOpt('notes'); return; }
-        if (key.toLowerCase() === 'h') { useHint(); return; }
+        // Clear cell
+        if (key === '0' || key === 'Delete' || key === 'Backspace') {
+            clearCell();
+            return;
+        }
+
+        // Undo
+        if (lowerKey === 'z' && (e.ctrlKey || e.metaKey || !e.altKey)) {
+            if (e.ctrlKey || e.metaKey) e.preventDefault();
+            undoMove();
+            return;
+        }
+
+        // Single-key shortcuts for Hint and Notes when H and N are NOT valid board symbols
+        // On 4×4, 9×9, 16×16 (where boardSize < 17), 'H' (17) and 'N' (23) are not symbols.
+        // Therefore plain 'h' and 'n' invoke Hint and Notes mode respectively.
+        if (boardSize < 17) {
+            if (lowerKey === 'n' && !e.altKey && !e.ctrlKey && !e.metaKey) {
+                toggleOpt('notes');
+                return;
+            }
+            if (lowerKey === 'h' && !e.altKey && !e.ctrlKey && !e.metaKey) {
+                useHint();
+                return;
+            }
+        }
+
+        // Number / letter symbol input (supports 1-9 and A-P)
+        // On 25×25, plain 'h' (17) and 'n' (23) enter legitimate symbols into the selected cell.
+        if (!e.altKey && !e.ctrlKey && !e.metaKey) {
+            const num = keyToNum(key, boardSize);
+            if (num !== null) {
+                inputNumber(num);
+                return;
+            }
+        }
     });
 }
 

@@ -8,6 +8,7 @@
 import { state, DIFF_CONFIG } from './sudoku.js';
 import { BOARD_CONFIG, setBoardSize } from './config.js';
 import { generatePuzzle } from './generator.js';
+import { solveWithStatus, SOLVE_STATUS } from './solver.js';
 import { saveBestTimes } from '../utils/storage.js';
 import { formatTime } from '../utils/helpers.js';
 import { toSymbol } from '../utils/symbols.js';
@@ -49,6 +50,8 @@ export function clearRelatedNotes(idx, num) {
 
 // ── TIMER ────────────────────────────────────────────────────────────────────
 export function startTimer() {
+    stopTimer();
+    if (!state.gameActive) return;
     state.timerActive = true;
     state.timerRef = setInterval(() => {
         state.timerSec++;
@@ -59,7 +62,10 @@ export function startTimer() {
 
 export function stopTimer() {
     state.timerActive = false;
-    clearInterval(state.timerRef);
+    if (state.timerRef) {
+        clearInterval(state.timerRef);
+        state.timerRef = null;
+    }
 }
 
 // ── WIN CHECK ────────────────────────────────────────────────────────────────
@@ -70,9 +76,15 @@ export function checkWin() {
         state.gameActive = false;
         stopTimer();
         const t = formatTime(state.timerSec);
-        if (!state.bestTimes[state.difficulty] || state.timerSec < state.bestTimes[state.difficulty]) {
-            state.bestTimes[state.difficulty] = state.timerSec;
+        const sizeKey = BOARD_CONFIG.boardSize;
+        if (!state.bestTimes[sizeKey]) {
+            state.bestTimes[sizeKey] = {};
+        }
+        const currentBest = state.bestTimes[sizeKey][state.difficulty];
+        if (!currentBest || state.timerSec < currentBest) {
+            state.bestTimes[sizeKey][state.difficulty] = state.timerSec;
             saveBestTimes(state.bestTimes);
+            if (_ui.updateBestTimes) _ui.updateBestTimes();
         }
         const winTimeEl = document.getElementById('win-time');
         if (winTimeEl) winTimeEl.textContent = t;
@@ -134,6 +146,8 @@ export function inputNumber(num) {
         if (_ui.addHistoryLog) _ui.addHistoryLog(`R${Math.floor(idx / boardSize) + 1}C${idx % boardSize + 1}: ${toSymbol(num)} ✗`, 'err');
         if (_ui.showToast) _ui.showToast(`❌ Incorrect! ${state.maxMistakes - state.mistakes} chances left`, 'error');
         if (state.mistakes >= state.maxMistakes) {
+            state.gameActive = false;
+            stopTimer();
             setTimeout(() => { if (_ui.showModal) _ui.showModal('lose-modal'); }, 600);
         }
     } else if (correct) {
@@ -167,6 +181,7 @@ export function clearCell() {
 
 // ── UNDO ─────────────────────────────────────────────────────────────────────
 export function undoMove() {
+    if (!state.gameActive) return;
     if (!state.history.length) { if (_ui.showToast) _ui.showToast('Nothing to undo!', 'info'); return; }
     const h = state.history.pop();
     const boardSize = BOARD_CONFIG.boardSize;
@@ -223,89 +238,217 @@ export function useHint() {
     checkWin();
 }
 
+// ── GENERATION & DUPLICATE REQUEST GUARDS ────────────────────────────────────
+let _isGenerating = false;
+let _generationId = 0;
+
+export function isGenerating() {
+    return _isGenerating;
+}
+
+/**
+ * Toggle interactive controls and visual busy states during puzzle generation.
+ * Guaranteed to run in finally blocks so controls are never permanently disabled.
+ */
+function _setGeneratingState(generating) {
+    _isGenerating = generating;
+    const buttons = document.querySelectorAll(
+        '.new-game-btn, #btn-new-game, [data-action="new-game"], .size-btn, .diff-btn, #btn-reset, #btn-hint, #btn-auto-solve'
+    );
+    buttons.forEach(btn => {
+        btn.disabled = generating;
+        btn.setAttribute('aria-busy', generating ? 'true' : 'false');
+        btn.classList.toggle('generating', generating);
+    });
+}
+
 // ── AUTO SOLVE ───────────────────────────────────────────────────────────────
 export function solvePuzzle() {
-    if (!state.gameActive) return;
+    if (!state.gameActive || _isGenerating) return;
     if (!confirm('Auto-solve will end your current game. Continue?')) return;
     const cellCount = BOARD_CONFIG.cellCount;
+
+    // Verify if state.solution is intact and complete
+    let sol = state.solution;
+    if (!sol || sol.length !== cellCount || sol.some(v => v === 0)) {
+        const boardCopy = [...state.initialBoard];
+        const res = solveWithStatus(boardCopy, false, 5000);
+        if (res.success) {
+            sol = boardCopy;
+            state.solution = [...boardCopy];
+        } else {
+            if (res.status === SOLVE_STATUS.TIMEOUT) {
+                if (_ui.showToast) _ui.showToast('Solver timed out. Puzzle too complex.', 'error');
+            } else {
+                if (_ui.showToast) _ui.showToast('Unable to solve puzzle.', 'error');
+            }
+            return;
+        }
+    }
+
     for (let i = 0; i < cellCount; i++) {
         if (!state.given[i]) {
-            state.board[i]  = state.solution[i];
+            state.board[i]  = sol[i];
             state.errors[i] = false;
             state.notes[i].clear();
         }
     }
     state.gameActive = false;
     stopTimer();
-    _ui.updateBoardDisplay();
-    _ui.showToast('🤖 Puzzle auto-solved!', 'info');
+    if (_ui.updateBoardDisplay) _ui.updateBoardDisplay();
+    if (_ui.showToast) _ui.showToast('🤖 Puzzle auto-solved!', 'info');
 }
 
 export function revealSolution() {
-    _ui.closeModal('lose-modal');
-    solvePuzzle();
+    if (_ui.closeModal) _ui.closeModal('lose-modal');
+    const cellCount = BOARD_CONFIG.cellCount;
+
+    let sol = state.solution;
+    if (!sol || sol.length !== cellCount || sol.some(v => v === 0)) {
+        const boardCopy = [...state.initialBoard];
+        const res = solveWithStatus(boardCopy, false, 5000);
+        if (res.success) {
+            sol = boardCopy;
+            state.solution = [...boardCopy];
+        } else {
+            if (_ui.showToast) _ui.showToast('Unable to reveal solution.', 'error');
+            return;
+        }
+    }
+
+    for (let i = 0; i < cellCount; i++) {
+        if (!state.given[i]) {
+            state.board[i]  = sol[i];
+            state.errors[i] = false;
+            state.notes[i].clear();
+        }
+    }
+    state.gameActive = false;
+    stopTimer();
+    if (_ui.updateBoardDisplay) _ui.updateBoardDisplay();
+    if (_ui.showToast) _ui.showToast('💡 Solution revealed', 'info');
 }
 
 // ── NEW GAME ─────────────────────────────────────────────────────────────────
-export function newGame() {
+export async function newGame() {
+    // Prevent overlapping generation requests from rapid clicks
+    if (_isGenerating) return;
+    _setGeneratingState(true);
+    const genId = ++_generationId;
+    const requestedSize = BOARD_CONFIG.boardSize;
+
     if (_ui.closeModal) {
         _ui.closeModal('win-modal');
         _ui.closeModal('lose-modal');
+        _ui.closeModal('confirm-modal');
     }
     const bw = document.getElementById('board-wrapper');
     if (bw) bw.classList.remove('pulse-win');
 
     const diffCfg = (DIFF_CONFIG && DIFF_CONFIG()[state.difficulty]) || { clues: 35 };
 
-    setTimeout(() => {
-        try {
-            const cellCount = BOARD_CONFIG.cellCount;
-            const { puzzle, solution } = generatePuzzle(diffCfg.clues);
+    try {
+        // Yield momentarily to allow browser to paint disabled/busy control state
+        await new Promise(resolve => setTimeout(resolve, 10));
 
-            state.board       = [...puzzle];
-            state.solution    = [...solution];
-            state.given       = puzzle.map(v => v !== 0);
-            state.notes       = Array.from({ length: cellCount }, () => new Set());
-            state.errors      = Array(cellCount).fill(false);
-            state.heatmap     = Array(cellCount).fill(0);
-            state.selected    = -1;
-            state.selectedNum = -1;
-            state.mistakes    = 0;
-            state.maxMistakes = BOARD_CONFIG.maxMistakes;
-            state.score       = 0;
-            state.hintsLeft   = BOARD_CONFIG.maxHints;
-            state.hintsUsed   = 0;
-            state.history     = [];
-            state.historyLog  = [];
-            state.gameActive  = true;
-
-            const hintEl = document.getElementById('hint-count');
-            if (hintEl) hintEl.textContent = `(${BOARD_CONFIG.maxHints})`;
-            const histEl = document.getElementById('history-list');
-            if (histEl) histEl.innerHTML = '';
-
-            stopTimer(); state.timerSec = 0;
-            startTimer();
-
-            if (_ui.renderBoard) _ui.renderBoard();
-            if (_ui.renderNumPad) _ui.renderNumPad();
-            if (_ui.updateBestTimes) _ui.updateBestTimes();
-        } catch (err) {
-            console.error('Failed to initialize new game:', err);
-            if (_ui.showToast) _ui.showToast('Error generating puzzle. Retrying...', 'error');
+        // Stale check before starting generation
+        if (genId !== _generationId || requestedSize !== BOARD_CONFIG.boardSize) {
+            return;
         }
-    }, 50);
+
+        const cellCount = BOARD_CONFIG.cellCount;
+        // Keep current puzzle untouched until replacement is ready
+        const { puzzle, solution } = generatePuzzle(diffCfg.clues);
+
+        // Stale check after generation finishes
+        if (genId !== _generationId || requestedSize !== BOARD_CONFIG.boardSize) {
+            return;
+        }
+
+        // Apply new game state atomically
+        state.board        = [...puzzle];
+        state.initialBoard = [...puzzle];
+        state.solution     = [...solution];
+        state.given        = puzzle.map(v => v !== 0);
+        state.initialGiven = puzzle.map(v => v !== 0);
+        state.notes        = Array.from({ length: cellCount }, () => new Set());
+        state.errors       = Array(cellCount).fill(false);
+        state.heatmap      = Array(cellCount).fill(0);
+        state.selected     = -1;
+        state.selectedNum  = -1;
+        state.mistakes     = 0;
+        state.maxMistakes  = BOARD_CONFIG.maxMistakes;
+        state.score        = 0;
+        state.hintsLeft    = BOARD_CONFIG.maxHints;
+        state.hintsUsed    = 0;
+        state.history      = [];
+        state.historyLog   = [];
+        state.gameActive   = true;
+
+        const hintEl = document.getElementById('hint-count');
+        if (hintEl) hintEl.textContent = `(${BOARD_CONFIG.maxHints})`;
+        const histEl = document.getElementById('history-list');
+        if (histEl) histEl.innerHTML = '';
+
+        stopTimer();
+        state.timerSec = 0;
+        startTimer();
+
+        if (_ui.renderBoard) _ui.renderBoard();
+        if (_ui.renderNumPad) _ui.renderNumPad();
+        if (_ui.updateBestTimes) _ui.updateBestTimes();
+    } catch (err) {
+        console.error('Failed to initialize new game:', err);
+        if (_ui.showToast) _ui.showToast('Error generating puzzle. Retrying...', 'error');
+    } finally {
+        // Guarantee UI controls are restored
+        if (genId === _generationId) {
+            _setGeneratingState(false);
+        }
+    }
+}
+
+// ── ACTIVE GAME DETECTION ───────────────────────────────────────────────────
+export function hasGameProgress() {
+    if (!state.gameActive) return false;
+    if (state.mistakes > 0 || state.hintsUsed > 0) return true;
+    if (state.history && state.history.length > 0) return true;
+    if (state.notes && state.notes.some(s => s && s.size > 0)) return true;
+    const cellCount = BOARD_CONFIG.cellCount;
+    for (let i = 0; i < cellCount; i++) {
+        if (!state.given[i] && state.board[i] !== 0) return true;
+    }
+    if (state.timerSec > 0) return true;
+    return false;
 }
 
 // ── DIFFICULTY ───────────────────────────────────────────────────────────────
-export function setDifficulty(d) {
+export async function setDifficulty(d) {
+    if (_isGenerating || d === state.difficulty) return;
+    if (hasGameProgress()) {
+        const wasTimerActive = state.timerActive;
+        stopTimer();
+        let ok = false;
+        if (_ui.showConfirmModal) {
+            ok = await _ui.showConfirmModal({
+                title: 'Change Difficulty?',
+                message: 'Abandon your current game progress to change difficulty?'
+            });
+        } else {
+            ok = window.confirm('Abandon your current game progress to change difficulty?');
+        }
+        if (!ok) {
+            if (wasTimerActive) startTimer();
+            return;
+        }
+    }
     state.difficulty = d;
     document.querySelectorAll('.diff-btn').forEach(b => {
         const active = b.dataset.diff === d;
         b.classList.toggle('active', active);
         b.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
-    newGame();
+    await newGame();
 }
 
 // ── BOARD SIZE SWITCH ─────────────────────────────────────────────────────────
@@ -313,9 +456,27 @@ export function setDifficulty(d) {
  * Switch the active board size and start a fresh game.
  * This is the single entry point for all board-size changes.
  * Adding future sizes (16, 25) requires no changes here.
- * @param {number} size - one of 4, 9 (16, 25 when enabled)
+ * @param {number} size - one of 4, 9, 16, 25
  */
-export function setBoardSizeAndNewGame(size) {
+export async function setBoardSizeAndNewGame(size) {
+    if (_isGenerating || size === BOARD_CONFIG.boardSize) return;
+    if (hasGameProgress()) {
+        const wasTimerActive = state.timerActive;
+        stopTimer();
+        let ok = false;
+        if (_ui.showConfirmModal) {
+            ok = await _ui.showConfirmModal({
+                title: 'Change Board Size?',
+                message: 'Abandon your current game progress to change board size?'
+            });
+        } else {
+            ok = window.confirm('Abandon your current game progress to change board size?');
+        }
+        if (!ok) {
+            if (wasTimerActive) startTimer();
+            return;
+        }
+    }
     setBoardSize(size);           // mutates BOARD_CONFIG in place
     state.boardSizeKey = size;
 
@@ -341,24 +502,52 @@ export function setBoardSizeAndNewGame(size) {
         kbNumHint.textContent = bs <= 9 ? `1-${bs}` : `1-9 · A-${toSymbol(bs)}`;
     }
 
-    newGame();
+    await newGame();
 }
 
 // ── RESET ────────────────────────────────────────────────────────────────────
-export function confirmReset() {
+export async function confirmReset() {
     if (!state.gameActive) return;
-    if (!confirm('Reset all your progress?')) return;
-    const cellCount = BOARD_CONFIG.cellCount;
-    for (let i = 0; i < cellCount; i++) {
-        if (!state.given[i]) {
-            state.board[i] = 0; state.errors[i] = false; state.notes[i].clear();
-        }
+    const wasTimerActive = state.timerActive;
+    stopTimer();
+    let ok = false;
+    if (_ui.showConfirmModal) {
+        ok = await _ui.showConfirmModal({
+            title: 'Reset Progress?',
+            message: 'Reset all your progress on this puzzle?'
+        });
+    } else {
+        ok = window.confirm('Reset all your progress on this puzzle?');
     }
-    state.mistakes   = 0; state.score = 0;
-    state.history    = [];
-    state.historyLog = [];
+    if (!ok) {
+        if (wasTimerActive) startTimer();
+        return;
+    }
+    const cellCount = BOARD_CONFIG.cellCount;
+    state.board        = [...state.initialBoard];
+    state.given        = [...state.initialGiven];
+    state.notes        = Array.from({ length: cellCount }, () => new Set());
+    state.errors       = Array(cellCount).fill(false);
+    state.mistakes     = 0;
+    state.score        = 0;
+    state.hintsLeft    = BOARD_CONFIG.maxHints;
+    state.hintsUsed    = 0;
+    state.history      = [];
+    state.historyLog   = [];
+    state.selected     = -1;
+    state.selectedNum  = -1;
+
+    const hintEl = document.getElementById('hint-count');
+    if (hintEl) hintEl.textContent = `(${BOARD_CONFIG.maxHints})`;
+    const mistEl = document.getElementById('mistakes-val');
+    if (mistEl) mistEl.textContent = `0/${state.maxMistakes}`;
+    const scoreEl = document.getElementById('score-val');
+    if (scoreEl) scoreEl.textContent = '0';
     const histEl = document.getElementById('history-list');
     if (histEl) histEl.innerHTML = '';
+
+    if (wasTimerActive) startTimer();
+
     if (_ui.updateBoardDisplay) _ui.updateBoardDisplay();
     if (_ui.showToast) _ui.showToast('🔄 Board reset', 'info');
 }

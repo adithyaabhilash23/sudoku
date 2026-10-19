@@ -122,6 +122,7 @@ export const BOARD_CONFIG = {
     boxCols:     3,
     maxHints:    3,
     maxMistakes: 3,
+    label:       '9×9',
     cellFont:    '22px',  // updated by setBoardSize()
     noteFont:    '9px',
     dotSize:     '14px',  // updated by setBoardSize()
@@ -150,6 +151,7 @@ export function setBoardSize(size) {
     BOARD_CONFIG.boxCols     = def.boxCols;
     BOARD_CONFIG.maxHints    = def.maxHints;
     BOARD_CONFIG.maxMistakes = def.maxMistakes;
+    BOARD_CONFIG.label       = def.label;
     BOARD_CONFIG.cellFont    = def.cellFont;
     BOARD_CONFIG.noteFont    = def.noteFont;
     BOARD_CONFIG.dotSize     = def.dotSize;

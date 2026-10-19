@@ -14,10 +14,12 @@ export function DIFF_CONFIG() { return BOARD_CONFIG.difficulty; }
 // Array fields are initialised to 9×9 at startup (the default).
 // newGame() always re-allocates them to match BOARD_CONFIG.cellCount.
 export const state = {
-    board:       Array(BOARD_CONFIG.cellCount).fill(0),
-    solution:    Array(BOARD_CONFIG.cellCount).fill(0),
-    given:       Array(BOARD_CONFIG.cellCount).fill(false),
-    notes:       Array.from({ length: BOARD_CONFIG.cellCount }, () => new Set()),
+    board:        Array(BOARD_CONFIG.cellCount).fill(0),
+    initialBoard: Array(BOARD_CONFIG.cellCount).fill(0),
+    solution:     Array(BOARD_CONFIG.cellCount).fill(0),
+    given:        Array(BOARD_CONFIG.cellCount).fill(false),
+    initialGiven: Array(BOARD_CONFIG.cellCount).fill(false),
+    notes:        Array.from({ length: BOARD_CONFIG.cellCount }, () => new Set()),
     errors:      Array(BOARD_CONFIG.cellCount).fill(false),
     selected:    -1,
     difficulty:  'medium',

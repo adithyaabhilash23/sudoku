@@ -27,6 +27,48 @@ export function updateNumPad() {
     }
 }
 
+// ── CELL & UI DOM CACHE ──────────────────────────────────────────────────────
+let _cellCache = null;
+let _highlightedSet = new Set();
+let _heatmapCells = null;
+
+export function getCellElement(idx) {
+    return _cellCache && _cellCache[idx] ? _cellCache[idx].cell : document.querySelector(`.cell[data-idx="${idx}"]`);
+}
+
+/**
+ * Synchronize notes DOM for a cell.
+ * Avoids creating unnecessary note elements for cells without notes.
+ */
+function _syncCellNotes(ng, notesSet, boardSize) {
+    if (!notesSet || notesSet.size === 0) {
+        if (ng.children.length > 0) {
+            ng.innerHTML = '';
+        }
+        return;
+    }
+    // Only build note elements if not already present
+    if (ng.children.length !== boardSize) {
+        ng.innerHTML = '';
+        const frag = document.createDocumentFragment();
+        for (let n = 1; n <= boardSize; n++) {
+            const nd = document.createElement('div');
+            nd.className   = 'note-num' + (notesSet.has(n) ? ' visible' : '');
+            nd.dataset.n   = n;
+            nd.textContent = toSymbol(n);
+            frag.appendChild(nd);
+        }
+        ng.appendChild(frag);
+    } else {
+        // Fast class toggle for existing elements
+        for (let j = 0; j < ng.children.length; j++) {
+            const nd = ng.children[j];
+            const n = +nd.dataset.n;
+            nd.classList.toggle('visible', notesSet.has(n));
+        }
+    }
+}
+
 // ── RENDER BOARD ─────────────────────────────────────────────────────────────
 export function renderBoard() {
     const board     = document.getElementById('sudoku-board');
@@ -46,9 +88,16 @@ export function renderBoard() {
     board.style.setProperty('--glow-spread',    BOARD_CONFIG.glowSpread);
     board.dataset.size = boardSize;
 
+    _cellCache = new Array(cellCount);
+    _highlightedSet.clear();
+
+    const frag = document.createDocumentFragment();
+
     for (let i = 0; i < cellCount; i++) {
         const row = Math.floor(i / boardSize);
         const col = i % boardSize;
+        const boxR = Math.floor(row / boxRows) * boxRows;
+        const boxC = Math.floor(col / boxCols) * boxCols;
 
         const cell = document.createElement('div');
         cell.className = 'cell' + (state.given[i] ? ' given' : '');
@@ -67,13 +116,6 @@ export function renderBoard() {
         ng.className = 'notes-grid';
         ng.style.gridTemplateColumns = `repeat(${boxCols}, 1fr)`;
         ng.setAttribute('aria-hidden', 'true');
-        for (let n = 1; n <= boardSize; n++) {
-            const nd = document.createElement('div');
-            nd.className   = 'note-num';
-            nd.dataset.n   = n;
-            nd.textContent = toSymbol(n); // 1-9 or A-G
-            ng.appendChild(nd);
-        }
         cell.appendChild(ng);
 
         // Value
@@ -89,8 +131,20 @@ export function renderBoard() {
             }
         });
 
-        board.appendChild(cell);
+        frag.appendChild(cell);
+
+        _cellCache[i] = {
+            cell,
+            vd,
+            ng,
+            row,
+            col,
+            boxR,
+            boxC
+        };
     }
+
+    board.appendChild(frag);
 
     // Render continuous, between-cell subgrid separators
     _renderSubgridSeparators(board, boardSize, boxRows, boxCols);
@@ -142,32 +196,49 @@ function _cellAriaLabel(i, boardSize) {
     return `${base}, empty`;
 }
 
+/** Update display of a single cached cell. */
+function _updateCellDisplay(i, boardSize) {
+    const item = _cellCache[i];
+    if (!item) return;
+    const { cell, vd, ng } = item;
+
+    const v = state.board[i];
+    if (v !== 0) {
+        vd.textContent   = toSymbol(v);
+        ng.style.display = 'none';
+        cell.classList.toggle('error', !!(state.opts.mistakes && state.errors[i]));
+    } else {
+        vd.textContent   = '';
+        ng.style.display = 'grid';
+        _syncCellNotes(ng, state.notes[i], boardSize);
+        cell.classList.remove('error');
+    }
+    cell.classList.toggle('complete', !!(state.given[i] && v !== 0));
+    cell.setAttribute('aria-label', _cellAriaLabel(i, boardSize));
+}
+
 // ── UPDATE BOARD DISPLAY ──────────────────────────────────────────────────────
-export function updateBoardDisplay() {
+export function updateBoardDisplay(targetIndices = null) {
     const cellCount = BOARD_CONFIG.cellCount;
     const boardSize = BOARD_CONFIG.boardSize;
 
-    for (let i = 0; i < cellCount; i++) {
-        const cell = document.querySelector(`.cell[data-idx="${i}"]`);
-        if (!cell) continue;
-        const vd = cell.querySelector('.cell-value');
-        const ng = cell.querySelector('.notes-grid');
-
-        const v = state.board[i];
-        if (v !== 0) {
-            vd.textContent   = toSymbol(v); // display A-G for 10-16
-            ng.style.display = 'none';
-            cell.classList.toggle('error', state.opts.mistakes && state.errors[i]);
-        } else {
-            vd.textContent   = '';
-            ng.style.display = 'grid';
-            ng.querySelectorAll('.note-num').forEach(nd => {
-                nd.classList.toggle('visible', state.notes[i].has(+nd.dataset.n));
-            });
-        }
-        cell.classList.toggle('complete', state.given[i] && v !== 0);
-        cell.setAttribute('aria-label', _cellAriaLabel(i, boardSize));
+    if (!_cellCache || _cellCache.length !== cellCount) {
+        renderBoard();
+        return;
     }
+
+    if (targetIndices && Array.isArray(targetIndices)) {
+        for (const idx of targetIndices) {
+            if (idx >= 0 && idx < cellCount) {
+                _updateCellDisplay(idx, boardSize);
+            }
+        }
+    } else {
+        for (let i = 0; i < cellCount; i++) {
+            _updateCellDisplay(i, boardSize);
+        }
+    }
+
     updateHighlights();
     updateStats();
     updateProgress();
@@ -177,42 +248,88 @@ export function updateBoardDisplay() {
 
 // ── HIGHLIGHTS ───────────────────────────────────────────────────────────────
 export function updateHighlights() {
-    const sel     = state.selected;
-    const selVal  = sel >= 0 ? state.board[sel] : 0;
+    const sel       = state.selected;
+    const selVal    = sel >= 0 ? state.board[sel] : 0;
     const boardSize = BOARD_CONFIG.boardSize;
     const boxRows   = BOARD_CONFIG.boxRows;
     const boxCols   = BOARD_CONFIG.boxCols;
+    const cellCount = BOARD_CONFIG.cellCount;
 
-    document.querySelectorAll('.cell').forEach(cell => {
-        const i = +cell.dataset.idx;
-        cell.classList.remove('selected', 'related', 'same-num');
+    if (!_cellCache || _cellCache.length !== cellCount) return;
 
-        if (i === sel) { cell.classList.add('selected'); return; }
-        if (sel < 0) return;
-
-        const selRow  = Math.floor(sel / boardSize), selCol  = sel % boardSize;
-        const selBoxR = Math.floor(selRow / boxRows) * boxRows;
-        const selBoxC = Math.floor(selCol / boxCols) * boxCols;
-        const iRow    = Math.floor(i / boardSize),   iCol    = i % boardSize;
-
-        const isRelated = (
-            iRow === selRow || iCol === selCol ||
-            (Math.floor(iRow / boxRows) * boxRows === selBoxR &&
-             Math.floor(iCol / boxCols) * boxCols === selBoxC)
-        );
-
-        if (state.opts.samenum && selVal !== 0 && state.board[i] === selVal) {
-            cell.classList.add('same-num');
-        } else if (state.opts.related && isRelated) {
-            cell.classList.add('related');
+    // 1. Clear highlights only from previously highlighted cells
+    for (const idx of _highlightedSet) {
+        if (idx >= 0 && idx < cellCount && _cellCache[idx]) {
+            _cellCache[idx].cell.classList.remove('selected', 'related', 'same-num');
         }
-    });
+    }
+    _highlightedSet.clear();
+
+    if (sel < 0 || sel >= cellCount || !_cellCache[sel]) return;
+
+    // 2. Add 'selected' to active cell
+    _cellCache[sel].cell.classList.add('selected');
+    _highlightedSet.add(sel);
+
+    const selItem = _cellCache[sel];
+    const selRow  = selItem.row;
+    const selCol  = selItem.col;
+    const selBoxR = selItem.boxR;
+    const selBoxC = selItem.boxC;
+
+    // 3. Highlight related cells (row, col, box)
+    if (state.opts.related) {
+        // Row peers
+        const rowStart = selRow * boardSize;
+        for (let c = 0; c < boardSize; c++) {
+            const i = rowStart + c;
+            if (i !== sel) {
+                _cellCache[i].cell.classList.add('related');
+                _highlightedSet.add(i);
+            }
+        }
+
+        // Col peers
+        for (let r = 0; r < boardSize; r++) {
+            const i = r * boardSize + selCol;
+            if (i !== sel) {
+                _cellCache[i].cell.classList.add('related');
+                _highlightedSet.add(i);
+            }
+        }
+
+        // Box peers
+        for (let br = 0; br < boxRows; br++) {
+            const rOffset = (selBoxR + br) * boardSize;
+            for (let bc = 0; bc < boxCols; bc++) {
+                const i = rOffset + (selBoxC + bc);
+                if (i !== sel) {
+                    _cellCache[i].cell.classList.add('related');
+                    _highlightedSet.add(i);
+                }
+            }
+        }
+    }
+
+    // 4. Highlight same-number cells (overrides related styling in CSS or class)
+    if (state.opts.samenum && selVal !== 0) {
+        for (let i = 0; i < cellCount; i++) {
+            if (state.board[i] === selVal && i !== sel) {
+                const c = _cellCache[i].cell;
+                c.classList.remove('related');
+                c.classList.add('same-num');
+                _highlightedSet.add(i);
+            }
+        }
+    }
 }
 
 // ── SELECT CELL ──────────────────────────────────────────────────────────────
 export function selectCell(idx) {
-    if (state.selected === idx) { state.selected = -1; state.selectedNum = -1; }
-    else {
+    if (state.selected === idx) {
+        state.selected = -1;
+        state.selectedNum = -1;
+    } else {
         state.selected = idx;
         if (state.board[idx] !== 0) state.selectedNum = state.board[idx];
     }
@@ -259,13 +376,19 @@ export function updateProgress() {
 export function updateBestTimes() {
     const el = document.getElementById('best-times');
     if (!el) return;
+    const titleEl = document.getElementById('best-times-title');
+    if (titleEl) {
+        const label = BOARD_CONFIG.label || `${BOARD_CONFIG.boardSize}×${BOARD_CONFIG.boardSize}`;
+        titleEl.textContent = `🏆 Best Times (${label})`;
+    }
     el.innerHTML = '';
     const diffConfig = DIFF_CONFIG();
     const diffs      = Object.keys(diffConfig);
+    const sizeRecords = (state.bestTimes && (state.bestTimes[BOARD_CONFIG.boardSize] || state.bestTimes[String(BOARD_CONFIG.boardSize)])) || {};
     diffs.forEach(d => {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border-light);';
-        const t = state.bestTimes[d];
+        const t = sizeRecords[d];
         row.innerHTML = `<span style="color:var(--text-muted);font-size:0.78rem">${diffConfig[d].label}</span>
       <span style="color:${diffConfig[d].color};font-size:0.8rem;font-weight:700">${t ? formatTime(t) : '—'}</span>`;
         el.appendChild(row);
@@ -280,28 +403,36 @@ export function updateHeatmap() {
     const boardSize = BOARD_CONFIG.boardSize;
 
     // Rebuild grid if cell count changed (e.g. after board-size switch)
-    if (hm.children.length !== cellCount) {
+    if (!_heatmapCells || _heatmapCells.length !== cellCount) {
         hm.innerHTML = '';
+        _heatmapCells = new Array(cellCount);
+        const frag = document.createDocumentFragment();
         for (let i = 0; i < cellCount; i++) {
             const c     = document.createElement('div');
             c.className = 'heatmap-cell';
             c.title     = `R${Math.floor(i / boardSize) + 1}C${i % boardSize + 1}`;
-            hm.appendChild(c);
+            frag.appendChild(c);
+            _heatmapCells[i] = c;
         }
+        hm.appendChild(frag);
         // Update the CSS grid columns to match the board size
         hm.style.gridTemplateColumns = `repeat(${boardSize}, 1fr)`;
     }
 
     const max = Math.max(1, ...state.heatmap);
-    hm.querySelectorAll('.heatmap-cell').forEach((c, i) => {
+    for (let i = 0; i < cellCount; i++) {
+        const c         = _heatmapCells[i];
+        if (!c) continue;
         const v         = state.heatmap[i];
         const intensity = v / max;
-        if (v === 0) { c.style.background = 'var(--border-light)'; c.textContent = ''; }
-        else {
+        if (v === 0) {
+            c.style.background = 'var(--border-light)';
+            c.textContent      = '';
+        } else {
             const r = Math.round(233 * intensity), g = Math.round(69 + 100 * (1 - intensity));
             c.style.background = `rgb(${r},${g},${Math.round(96 * intensity)})`;
             c.style.color      = 'rgba(255,255,255,0.8)';
             c.textContent      = v;
         }
-    });
+    }
 }
