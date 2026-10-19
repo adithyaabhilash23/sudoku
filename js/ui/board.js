@@ -36,13 +36,15 @@ export function renderBoard() {
     const cellCount = BOARD_CONFIG.cellCount;
 
     board.innerHTML = '';
-    // Set grid layout and typography CSS variables from BOARD_CONFIG.
-    // --cell-font-size and --note-font-size cascade to all children via var().
+    // Set grid layout, typography, and adaptive corner glow variables from BOARD_CONFIG.
     board.style.gridTemplateColumns = `repeat(${boardSize}, 1fr)`;
     board.style.setProperty('--cell-font-size', BOARD_CONFIG.cellFont);
     board.style.setProperty('--note-font-size', BOARD_CONFIG.noteFont);
-    board.style.setProperty('--completion-dot-size',   BOARD_CONFIG.dotSize);
-    board.style.setProperty('--completion-dot-offset', BOARD_CONFIG.dotOffset);
+    board.style.setProperty('--glow-start',     BOARD_CONFIG.glowStart);
+    board.style.setProperty('--glow-mid',       BOARD_CONFIG.glowMid);
+    board.style.setProperty('--glow-mid-stop',  BOARD_CONFIG.glowMidStop);
+    board.style.setProperty('--glow-spread',    BOARD_CONFIG.glowSpread);
+    board.dataset.size = boardSize;
 
     for (let i = 0; i < cellCount; i++) {
         const row = Math.floor(i / boardSize);
@@ -59,11 +61,6 @@ export function renderBoard() {
         cell.setAttribute('tabindex', '0');
         cell.setAttribute('aria-label', _cellAriaLabel(i, boardSize));
         cell.setAttribute('aria-readonly', state.given[i] ? 'true' : 'false');
-
-        // Completion ring
-        const ring = document.createElement('div');
-        ring.className = 'completion-ring';
-        cell.appendChild(ring);
 
         // Notes grid — columns match boxCols so notes are spatially aligned
         const ng = document.createElement('div');
@@ -84,14 +81,6 @@ export function renderBoard() {
         vd.className = 'cell-value';
         cell.appendChild(vd);
 
-        // Box borders — applied inline so they work for any size
-        if (col > 0 && col % boxCols === 0) {
-            cell.style.borderLeft = '2.5px solid var(--border-box)';
-        }
-        if (row > 0 && row % boxRows === 0) {
-            cell.style.borderTop = '2.5px solid var(--border-box)';
-        }
-
         cell.addEventListener('click',   () => selectCell(i));
         cell.addEventListener('keydown', e  => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -102,7 +91,43 @@ export function renderBoard() {
 
         board.appendChild(cell);
     }
+
+    // Render continuous, between-cell subgrid separators
+    _renderSubgridSeparators(board, boardSize, boxRows, boxCols);
+
     updateBoardDisplay();
+}
+
+/**
+ * Render dedicated subgrid separator elements between boxes.
+ * These separators sit in the grid gaps rather than eating into cell dimensions.
+ */
+function _renderSubgridSeparators(board, boardSize, boxRows, boxCols) {
+    const sepContainer = document.createElement('div');
+    sepContainer.className = 'subgrid-separators';
+    sepContainer.setAttribute('aria-hidden', 'true');
+
+    const gapPx = 2; // matches gap in CSS
+
+    // Vertical separators between box columns
+    for (let col = boxCols; col < boardSize; col += boxCols) {
+        const sep = document.createElement('div');
+        sep.className = 'subgrid-sep subgrid-sep-v';
+        const ratio = col / boardSize;
+        sep.style.left = `calc(${ratio * 100}% + ${(ratio - 0.5) * gapPx}px)`;
+        sepContainer.appendChild(sep);
+    }
+
+    // Horizontal separators between box rows
+    for (let row = boxRows; row < boardSize; row += boxRows) {
+        const sep = document.createElement('div');
+        sep.className = 'subgrid-sep subgrid-sep-h';
+        const ratio = row / boardSize;
+        sep.style.top = `calc(${ratio * 100}% + ${(ratio - 0.5) * gapPx}px)`;
+        sepContainer.appendChild(sep);
+    }
+
+    board.appendChild(sepContainer);
 }
 
 /** Build a human-readable aria-label for a given cell index. */
@@ -198,10 +223,13 @@ export function selectCell(idx) {
 // ── STATS ────────────────────────────────────────────────────────────────────
 export function updateStats() {
     const cellCount = BOARD_CONFIG.cellCount;
-    document.getElementById('mistakes-val').textContent = `${state.mistakes}/${state.maxMistakes}`;
-    document.getElementById('score-val').textContent    = state.score;
+    const mistEl = document.getElementById('mistakes-val');
+    if (mistEl) mistEl.textContent = `${state.mistakes}/${state.maxMistakes}`;
+    const scoreEl = document.getElementById('score-val');
+    if (scoreEl) scoreEl.textContent = state.score;
     const filled = state.board.filter(v => v !== 0).length;
-    document.getElementById('filled-val').textContent   = `${filled}/${cellCount}`;
+    const filledEl = document.getElementById('filled-val');
+    if (filledEl) filledEl.textContent = `${filled}/${cellCount}`;
 }
 
 // ── PROGRESS ─────────────────────────────────────────────────────────────────
@@ -213,17 +241,24 @@ export function updateProgress() {
     const accPct        = totalFilled ? Math.round(correctFilled / totalFilled * 100) : 100;
     const hintPct       = Math.round(state.hintsUsed / BOARD_CONFIG.maxHints * 100);
 
-    document.getElementById('prog-filled').style.width     = filledPct + '%';
-    document.getElementById('prog-filled-txt').textContent = filledPct + '%';
-    document.getElementById('prog-acc').style.width        = accPct + '%';
-    document.getElementById('prog-acc-txt').textContent    = accPct + '%';
-    document.getElementById('prog-hint').style.width       = hintPct + '%';
-    document.getElementById('prog-hint-txt').textContent   = `${state.hintsUsed}/${BOARD_CONFIG.maxHints}`;
+    const pf = document.getElementById('prog-filled');
+    if (pf) pf.style.width = filledPct + '%';
+    const pft = document.getElementById('prog-filled-txt');
+    if (pft) pft.textContent = filledPct + '%';
+    const pa = document.getElementById('prog-acc');
+    if (pa) pa.style.width = accPct + '%';
+    const pat = document.getElementById('prog-acc-txt');
+    if (pat) pat.textContent = accPct + '%';
+    const ph = document.getElementById('prog-hint');
+    if (ph) ph.style.width = hintPct + '%';
+    const pht = document.getElementById('prog-hint-txt');
+    if (pht) pht.textContent = `${state.hintsUsed}/${BOARD_CONFIG.maxHints}`;
 }
 
 // ── BEST TIMES ───────────────────────────────────────────────────────────────
 export function updateBestTimes() {
-    const el    = document.getElementById('best-times');
+    const el = document.getElementById('best-times');
+    if (!el) return;
     el.innerHTML = '';
     const diffConfig = DIFF_CONFIG();
     const diffs      = Object.keys(diffConfig);
@@ -239,7 +274,8 @@ export function updateBestTimes() {
 
 // ── HEATMAP ──────────────────────────────────────────────────────────────────
 export function updateHeatmap() {
-    const hm        = document.getElementById('heatmap');
+    const hm = document.getElementById('heatmap');
+    if (!hm) return;
     const cellCount = BOARD_CONFIG.cellCount;
     const boardSize = BOARD_CONFIG.boardSize;
 

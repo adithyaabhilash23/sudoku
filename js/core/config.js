@@ -26,8 +26,12 @@ export const BOARD_SIZES = Object.freeze({
         label:        '4×4',
         cellFont:     '32px',  // typography: larger cells, fewer numbers
         noteFont:     '12px',
-        dotSize:      '32px',  // completion dot: 31.19% of ~103.5 px cell
-        dotOffset:    '7px',   // corner overhang: proportional to dot size
+        dotSize:      '32px',  // legacy dot compatibility
+        dotOffset:    '7px',
+        glowStart:    'rgba(0, 214, 143, 0.26)',
+        glowMid:      'rgba(0, 214, 143, 0.10)',
+        glowMidStop:  '24%',
+        glowSpread:   '60%',
         difficulty: Object.freeze({
             easy:   { clues: 12, label: 'Easy',   color: '#00d68f' },
             medium: { clues: 10, label: 'Medium', color: '#4fc3f7' },
@@ -44,8 +48,12 @@ export const BOARD_SIZES = Object.freeze({
         label:        '9×9',
         cellFont:     '22px',  // typography: reference size — must match current appearance
         noteFont:     '9px',
-        dotSize:      '14px',  // completion dot: 31.19% of ~44.9 px cell (visual reference)
-        dotOffset:    '3px',   // corner overhang: matches current implementation exactly
+        dotSize:      '14px',  // legacy dot compatibility
+        dotOffset:    '3px',
+        glowStart:    'rgba(0, 214, 143, 0.22)',
+        glowMid:      'rgba(0, 214, 143, 0.08)',
+        glowMidStop:  '20%',
+        glowSpread:   '48%',
         difficulty: Object.freeze({
             easy:   { clues: 45, label: 'Easy',   color: '#00d68f' },
             medium: { clues: 35, label: 'Medium', color: '#4fc3f7' },
@@ -62,8 +70,12 @@ export const BOARD_SIZES = Object.freeze({
         label:        '16×16',
         cellFont:     '16px',  // typography: smaller cells, more numbers
         noteFont:     '6px',
-        dotSize:      '8px',   // completion dot: 31.19% of ~24.4 px cell
-        dotOffset:    '2px',   // corner overhang: proportional to dot size
+        dotSize:      '8px',   // legacy dot compatibility
+        dotOffset:    '2px',
+        glowStart:    'rgba(0, 214, 143, 0.18)',
+        glowMid:      'rgba(0, 214, 143, 0.06)',
+        glowMidStop:  '16%',
+        glowSpread:   '38%',
         difficulty: Object.freeze({
             easy:   { clues: 160, label: 'Easy',   color: '#00d68f' },
             medium: { clues: 130, label: 'Medium', color: '#4fc3f7' },
@@ -80,8 +92,12 @@ export const BOARD_SIZES = Object.freeze({
         label:        '25×25',
         cellFont:     '12px',  // typography: very small cells — must stay legible
         noteFont:     '4px',
-        dotSize:      '5px',   // completion dot: 31.19% of ~14.9 px cell
-        dotOffset:    '1px',   // corner overhang: proportional to dot size
+        dotSize:      '5px',   // legacy dot compatibility
+        dotOffset:    '1px',
+        glowStart:    'rgba(0, 214, 143, 0.14)',
+        glowMid:      'rgba(0, 214, 143, 0.04)',
+        glowMidStop:  '12%',
+        glowSpread:   '32%',
         difficulty: Object.freeze({
             easy:   { clues: 390, label: 'Easy',   color: '#00d68f' }, // ~62% of 625
             medium: { clues: 315, label: 'Medium', color: '#4fc3f7' }, // ~50%
@@ -110,6 +126,10 @@ export const BOARD_CONFIG = {
     noteFont:    '9px',
     dotSize:     '14px',  // updated by setBoardSize()
     dotOffset:   '3px',   // updated by setBoardSize()
+    glowStart:   'rgba(0, 214, 143, 0.22)',
+    glowMid:     'rgba(0, 214, 143, 0.08)',
+    glowMidStop: '20%',
+    glowSpread:  '48%',
     get cellCount() { return this.boardSize * this.boardSize; },
     get symbols()   { return Array.from({ length: this.boardSize }, (_, i) => i + 1); },
     difficulty:  BOARD_SIZES[9].difficulty,
@@ -134,6 +154,10 @@ export function setBoardSize(size) {
     BOARD_CONFIG.noteFont    = def.noteFont;
     BOARD_CONFIG.dotSize     = def.dotSize;
     BOARD_CONFIG.dotOffset   = def.dotOffset;
+    BOARD_CONFIG.glowStart   = def.glowStart;
+    BOARD_CONFIG.glowMid     = def.glowMid;
+    BOARD_CONFIG.glowMidStop = def.glowMidStop;
+    BOARD_CONFIG.glowSpread  = def.glowSpread;
     BOARD_CONFIG.difficulty  = def.difficulty;
 }
 

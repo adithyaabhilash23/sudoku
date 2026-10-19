@@ -94,14 +94,14 @@
     }
 }
 
-/* Completion ring pop */
-@keyframes ringPop {
+/* Glow fade in */
+@keyframes glowFadeIn {
     from {
-        transform: scale(0);
+        opacity: 0;
     }
 
     to {
-        transform: scale(1);
+        opacity: 1;
     }
 }
 
@@ -158,9 +158,8 @@
     animation: shake 0.4s ease;
 }
 
-.cell.complete .completion-ring {
-    display: block;
-    animation: ringPop 0.3s ease;
+.cell.complete::after {
+    animation: glowFadeIn 0.3s ease;
 }
 
 .history-item {

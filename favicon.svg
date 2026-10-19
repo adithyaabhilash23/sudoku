@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="neonGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e94560"/>
+      <stop offset="50%" stop-color="#f0a500"/>
+      <stop offset="100%" stop-color="#4fc3f7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background container matching dark neon theme -->
+  <rect width="64" height="64" rx="14" fill="#0f0f1a"/>
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="#1a1a2e" stroke="url(#neonGlow)" stroke-width="2.5"/>
+
+  <!-- Inner 3x3 Grid Frame -->
+  <rect x="8" y="8" width="48" height="48" rx="6" fill="#141426"/>
+
+  <!-- Sudoku Grid Box Dividing Lines -->
+  <line x1="24" y1="9" x2="24" y2="55" stroke="#e94560" stroke-width="2" stroke-linecap="round"/>
+  <line x1="40" y1="9" x2="40" y2="55" stroke="#e94560" stroke-width="2" stroke-linecap="round"/>
+  <line x1="9" y1="24" x2="55" y2="24" stroke="#e94560" stroke-width="2" stroke-linecap="round"/>
+  <line x1="9" y1="40" x2="55" y2="40" stroke="#e94560" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Cell Glyphs (Super Sudoku theme colors) -->
+  <text x="16" y="21" font-family="'Segoe UI', system-ui, sans-serif" font-size="12" font-weight="900" fill="#4fc3f7" text-anchor="middle" dominant-baseline="central">9</text>
+  <text x="48" y="21" font-family="'Segoe UI', system-ui, sans-serif" font-size="12" font-weight="900" fill="#00d68f" text-anchor="middle" dominant-baseline="central">4</text>
+  <text x="32" y="37" font-family="'Segoe UI', system-ui, sans-serif" font-size="14" font-weight="900" fill="#f0a500" text-anchor="middle" dominant-baseline="central">S</text>
+  <text x="16" y="53" font-family="'Segoe UI', system-ui, sans-serif" font-size="12" font-weight="900" fill="#ffb74d" text-anchor="middle" dominant-baseline="central">3</text>
+  <text x="48" y="53" font-family="'Segoe UI', system-ui, sans-serif" font-size="12" font-weight="900" fill="#ce93d8" text-anchor="middle" dominant-baseline="central">7</text>
+</svg>

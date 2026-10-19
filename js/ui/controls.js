@@ -41,6 +41,7 @@ export function renderNumPad() {
 /** Build (or rebuild) the entire numpad DOM from scratch. */
 function _buildNumPad() {
     const np        = document.getElementById('numpad');
+    if (!np) return;
     const pages     = _pageCount();
     const paginated = pages > 1;
 
@@ -106,7 +107,9 @@ function _renderPageDots(pages) {
 
     if (pages <= 1) return;
 
-    const container = document.getElementById('numpad').parentElement;
+    const np = document.getElementById('numpad');
+    if (!np || !np.parentElement) return;
+    const container = np.parentElement;
     const dots = document.createElement('div');
     dots.id = 'numpad-dots';
     dots.setAttribute('aria-hidden', 'true');

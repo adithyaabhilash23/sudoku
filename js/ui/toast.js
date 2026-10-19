@@ -27,6 +27,7 @@ export function showToast(msg, type = '', dur = 2500) {
  */
 export function addHistoryLog(msg, type) {
     const list = document.getElementById('history-list');
+    if (!list) return;
     const item = document.createElement('div');
     item.className = 'history-item ' + type;
     item.textContent = msg;
